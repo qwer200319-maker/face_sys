@@ -1,0 +1,13 @@
+.report-filter-bar {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.report-filter-bar > div { min-width: 140px; }
+
+.rpt-stat { text-align: center; }
+
+.report-table-wrap { overflow-x: auto; max-height: 600px; overflow-y: auto; }
+
+.row-unknown td { background: rgba(239,68,68,0.04); }

@@ -1,0 +1,6 @@
+.cam-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+.cam-list-table .live-table { font-size: 13px; }
