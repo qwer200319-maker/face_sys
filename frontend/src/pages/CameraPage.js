@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { cameraAPI } from '../utils/api';
 import CameraView from '../components/CameraView';
 import toast from 'react-hot-toast';
+import './CameraPage.css';
 
 const EMPTY = { camera_id:'', name:'', location:'', stream_url:'' };
 
@@ -9,6 +10,7 @@ export default function CameraPage() {
   const [cameras, setCameras] = useState([]);
   const [form, setForm]       = useState(EMPTY);
   const [showForm, setShowForm] = useState(false);
+  const [fullscreenId, setFullscreenId] = useState(null);
 
   useEffect(() => { load(); }, []);
   const load = async () => { const r=await cameraAPI.list(); setCameras(r.data.results||r.data); };
@@ -25,6 +27,7 @@ export default function CameraPage() {
   };
 
   const active = cameras.filter(c=>c.is_active);
+  const fullCam = active.find(c => c.camera_id === fullscreenId);
 
   return (
     <div>
@@ -69,16 +72,46 @@ export default function CameraPage() {
         </div>
       )}
 
-      {active.length > 0 ? (
+      {/* Full Screen Overlay */}
+      {fullscreenId && fullCam && (
+        <div className="fs-overlay">
+          <div className="fs-bar">
+            <div style={{ fontWeight: 600 }}>🎥 Full Screen Camera</div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <select
+                className="fs-select"
+                value={fullscreenId}
+                onChange={e => setFullscreenId(e.target.value)}
+              >
+                {active.map(c => (
+                  <option key={c.camera_id} value={c.camera_id}>{c.name}</option>
+                ))}
+              </select>
+              <button className="btn btn-secondary" onClick={() => setFullscreenId(null)}>Exit Full</button>
+            </div>
+          </div>
+          <div className="fs-body">
+            <CameraView camera={fullCam} showActions={false} showHeader={false} showStats={false} className="fs-cam-card" />
+          </div>
+        </div>
+      )}
+
+      {!fullscreenId && (active.length > 0 ? (
         <div className={active.length===1?'':active.length===2?'grid-2':'grid-2'}>
-          {active.map(c=><CameraView key={c.camera_id} camera={c}/>)}
+          {active.map(c=>(
+            <CameraView
+              key={c.camera_id}
+              camera={c}
+              onFullScreen={() => setFullscreenId(c.camera_id)}
+            />
+          ))}
         </div>
       ) : (
         <div className="card" style={{textAlign:'center',padding:60,color:'#475569'}}>
           <div style={{fontSize:48,marginBottom:12}}>📹</div>
           <div>No active cameras — Add one above</div>
         </div>
-      )}
+      ))}
     </div>
   );
 }

@@ -4,7 +4,16 @@ import './CameraView.css';
 const WS_HOST = window.location.hostname;
 const FRAME_MS = 80;
 
-export default function CameraView({ camera }) {
+export default function CameraView({
+  camera,
+  showActions = true,
+  onFullScreen,
+  onExitFull,
+  isFullScreen = false,
+  showHeader = true,
+  showStats = true,
+  className = '',
+}) {
   const videoRef  = useRef(null);
   const canvasRef = useRef(null);
   const wsRef     = useRef(null);
@@ -61,22 +70,36 @@ export default function CameraView({ camera }) {
   },[]);
 
   return (
-    <div className="cam-card">
-      <div className="cam-header">
-        <div>
-          <div className="cam-name">{camera.name}</div>
-          <div className="cam-loc">📍 {camera.location}</div>
+    <div className={`cam-card ${className}`}>
+      {showHeader && (
+        <div className="cam-header">
+          <div>
+            <div className="cam-name">{camera.name}</div>
+            <div className="cam-loc">📍 {camera.location}</div>
+          </div>
+          <div className="cam-right">
+            <div className="cam-live-badge">
+              <span className={`live-dot${connected?' on':''}`}/>{connected?'LIVE':'Connecting…'}
+            </div>
+            {showActions && (
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={isFullScreen ? onExitFull : onFullScreen}
+              >
+                {isFullScreen ? 'Exit Full' : 'Full Screen'}
+              </button>
+            )}
+          </div>
         </div>
-        <div className="cam-live-badge">
-          <span className={`live-dot${connected?' on':''}`}/>{connected?'LIVE':'Connecting…'}
+      )}
+      {showStats && (
+        <div className="cam-stats-bar">
+          <span>👤 {stats.detected}</span>
+          <span style={{color:'#10b981'}}>✅ {stats.known}</span>
+          <span style={{color:'#ef4444'}}>❓ {stats.unknown}</span>
+          {stats.late>0 && <span style={{color:'#f59e0b'}}>⏰ {stats.late} late</span>}
         </div>
-      </div>
-      <div className="cam-stats-bar">
-        <span>👤 {stats.detected}</span>
-        <span style={{color:'#10b981'}}>✅ {stats.known}</span>
-        <span style={{color:'#ef4444'}}>❓ {stats.unknown}</span>
-        {stats.late>0 && <span style={{color:'#f59e0b'}}>⏰ {stats.late} late</span>}
-      </div>
+      )}
       <div className="cam-video-wrap">
         <video ref={videoRef} autoPlay muted playsInline className="cam-video"/>
         <div className="cam-overlay">
