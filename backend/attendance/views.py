@@ -330,3 +330,78 @@ class LeaveViewSet(viewsets.ModelViewSet):
 class CameraViewSet(viewsets.ModelViewSet):
     queryset         = Camera.objects.all()
     serializer_class = CameraSerializer
+
+
+# ═══════════════════════════════════════════════════════════════
+# Daily Report endpoint — uses attendance_logic
+# ═══════════════════════════════════════════════════════════════
+from django.http import HttpResponse
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .attendance_logic import (
+    get_daily_report,
+    export_daily_report_excel,
+    export_daily_report_pdf,
+)
+
+
+@api_view(['GET'])
+def daily_report_json(request):
+    """
+    GET /api/daily-report/?date=2025-01-15&department=1
+    Returns full In/Out/WorkHours/Late/OT per employee for given date.
+    """
+    from datetime import date
+    date_str  = request.query_params.get('date', date.today().isoformat())
+    dept_id   = request.query_params.get('department')
+    try:
+        target = date.fromisoformat(date_str)
+    except ValueError:
+        return Response({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=400)
+
+    data = get_daily_report(target, department_id=dept_id)
+    return Response({
+        'date':    date_str,
+        'count':   len(data),
+        'present': sum(1 for d in data if d['status'] != 'absent'),
+        'absent':  sum(1 for d in data if d['status'] == 'absent'),
+        'late':    sum(1 for d in data if d['is_late']),
+        'records': data,
+    })
+
+
+@api_view(['GET'])
+def daily_report_excel(request):
+    """GET /api/daily-report/excel/?date=2025-01-15"""
+    from datetime import date
+    date_str = request.query_params.get('date', date.today().isoformat())
+    dept_id  = request.query_params.get('department')
+    try:
+        target = date.fromisoformat(date_str)
+    except ValueError:
+        return HttpResponse('Invalid date', status=400)
+
+    buf = export_daily_report_excel(target, department_id=dept_id)
+    res = HttpResponse(
+        buf.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    res['Content-Disposition'] = f'attachment; filename="daily_report_{date_str}.xlsx"'
+    return res
+
+
+@api_view(['GET'])
+def daily_report_pdf(request):
+    """GET /api/daily-report/pdf/?date=2025-01-15"""
+    from datetime import date
+    date_str = request.query_params.get('date', date.today().isoformat())
+    dept_id  = request.query_params.get('department')
+    try:
+        target = date.fromisoformat(date_str)
+    except ValueError:
+        return HttpResponse('Invalid date', status=400)
+
+    buf = export_daily_report_pdf(target, department_id=dept_id)
+    res = HttpResponse(buf.read(), content_type='application/pdf')
+    res['Content-Disposition'] = f'attachment; filename="daily_report_{date_str}.pdf"'
+    return res

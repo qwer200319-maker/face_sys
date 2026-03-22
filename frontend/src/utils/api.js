@@ -55,3 +55,9 @@ export function saveBlob(blob, name) {
   URL.revokeObjectURL(u);
 }
 export default api;
+
+export const dailyReportAPI = {
+  json:  (date, dept) => api.get('/daily-report/',       { params: { date, department: dept } }),
+  excel: (date, dept) => api.get('/daily-report/excel/', { params: { date, department: dept }, responseType: 'blob' }),
+  pdf:   (date, dept) => api.get('/daily-report/pdf/',   { params: { date, department: dept }, responseType: 'blob' }),
+};

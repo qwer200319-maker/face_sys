@@ -1,7 +1,5 @@
 from django.db import models
-from django.utils import timezone
-import numpy as np
-from datetime import time, timedelta
+from datetime import timedelta
 
 
 class Department(models.Model):
@@ -13,24 +11,47 @@ class Department(models.Model):
 
 
 class Shift(models.Model):
-    """Factory work shifts e.g. Morning / Afternoon / Night"""
-    name       = models.CharField(max_length=50)          # e.g. "Morning Shift"
-    start_time = models.TimeField()                        # e.g. 06:00
-    end_time   = models.TimeField()                        # e.g. 14:00
-    grace_minutes = models.IntegerField(default=15)        # late grace period
-    is_overnight  = models.BooleanField(default=False)     # True for night shift
-    color      = models.CharField(max_length=7, default='#3b82f6')  # hex color for UI
-    created_at = models.DateTimeField(auto_now_add=True)
+    """
+    Work shift with smart check-in/check-out windows and optional break time.
+    
+    Timeline example (Full Time 08:00-17:00, grace=15, break=12:00-13:00):
+    
+    07:30 ──[CI window start]── 08:00 ──[grace]── 08:15 ──── WORK ────
+    12:00 ──[BREAK]── 13:00 ──── WORK ──── 16:30 ──[CO window]── 19:00
+    """
+    name            = models.CharField(max_length=50)
+    start_time      = models.TimeField()
+    end_time        = models.TimeField()
+    grace_minutes   = models.IntegerField(default=15)    # late grace period
 
-    def __str__(self): return f"{self.name} ({self.start_time:%H:%M}–{self.end_time:%H:%M})"
+    # Check-in window (minutes before/after shift start)
+    checkin_before  = models.IntegerField(default=30)    # 07:30 for 08:00 shift
+    checkin_after   = models.IntegerField(default=120)   # 10:00 for 08:00 shift
+
+    # Check-out window (minutes before/after shift end)
+    checkout_before = models.IntegerField(default=30)    # 16:30 for 17:00 shift
+    checkout_after  = models.IntegerField(default=120)   # 19:00 for 17:00 shift
+
+    # Break time — scans ignored during this window
+    break_start     = models.TimeField(null=True, blank=True)
+    break_end       = models.TimeField(null=True, blank=True)
+
+    is_overnight    = models.BooleanField(default=False)
+    color           = models.CharField(max_length=7, default='#3b82f6')
+    created_at      = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.start_time:%H:%M}–{self.end_time:%H:%M})"
 
     @property
     def duration_hours(self):
+        from datetime import datetime, timedelta
         start = timedelta(hours=self.start_time.hour, minutes=self.start_time.minute)
         end   = timedelta(hours=self.end_time.hour,   minutes=self.end_time.minute)
         if self.is_overnight:
             end += timedelta(hours=24)
-        return (end - start).seconds / 3600
+        delta = end - start
+        return round(delta.seconds / 3600, 1)
 
 
 class Employee(models.Model):
@@ -44,7 +65,7 @@ class Employee(models.Model):
     email          = models.EmailField(blank=True)
     hourly_rate    = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     photo          = models.ImageField(upload_to='employee_photos/', null=True, blank=True)
-    face_embedding = models.BinaryField(null=True, blank=True)  # averaged embedding
+    face_embedding = models.BinaryField(null=True, blank=True)
     is_active      = models.BooleanField(default=True)
     created_at     = models.DateTimeField(auto_now_add=True)
     updated_at     = models.DateTimeField(auto_now=True)
@@ -52,7 +73,8 @@ class Employee(models.Model):
     class Meta:
         ordering = ['employee_id']
 
-    def __str__(self): return f"{self.employee_id} – {self.name}"
+    def __str__(self):
+        return f"{self.employee_id} – {self.name}"
 
     @property
     def has_face_registered(self):
@@ -64,7 +86,7 @@ class Employee(models.Model):
 
 
 class FaceEmbedding(models.Model):
-    """Multiple raw embeddings per person for multi-angle accuracy"""
+    """Multiple embeddings per employee for multi-angle accuracy"""
     employee       = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='embeddings')
     embedding_data = models.BinaryField()
     created_at     = models.DateTimeField(auto_now_add=True)
@@ -81,11 +103,15 @@ class Camera(models.Model):
     is_active  = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self): return f"{self.camera_id} – {self.name}"
+    def __str__(self):
+        return f"{self.camera_id} – {self.name}"
 
 
 class AttendanceRecord(models.Model):
-    STATUS = [('check_in','Check In'),('check_out','Check Out')]
+    STATUS = [
+        ('check_in',  'Check In'),
+        ('check_out', 'Check Out'),
+    ]
 
     employee        = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True, related_name='records')
     timestamp       = models.DateTimeField(auto_now_add=True)
@@ -97,6 +123,8 @@ class AttendanceRecord(models.Model):
     is_late         = models.BooleanField(default=False)
     late_minutes    = models.IntegerField(default=0)
     unknown_alerted = models.BooleanField(default=False)
+    # Auto-calculated when check_out is saved
+    work_hours      = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
 
     class Meta:
         ordering = ['-timestamp']
@@ -108,11 +136,10 @@ class AttendanceRecord(models.Model):
 
     def __str__(self):
         who = self.employee.name if self.employee else "Unknown"
-        return f"{who} @ {self.timestamp:%Y-%m-%d %H:%M:%S}"
+        return f"{who} @ {self.timestamp:%Y-%m-%d %H:%M:%S} [{self.status}]"
 
 
 class OvertimeRecord(models.Model):
-    """Tracks overtime hours per employee per day"""
     STATUS = [('pending','Pending'),('approved','Approved'),('rejected','Rejected')]
 
     employee     = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='overtime_records')
@@ -120,17 +147,18 @@ class OvertimeRecord(models.Model):
     ot_start     = models.DateTimeField()
     ot_end       = models.DateTimeField(null=True, blank=True)
     ot_hours     = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    ot_rate      = models.DecimalField(max_digits=5, decimal_places=2, default=1.5)  # 1.5x normal
+    ot_rate      = models.DecimalField(max_digits=5, decimal_places=2, default=1.5)
     status       = models.CharField(max_length=10, choices=STATUS, default='pending')
     approved_by  = models.CharField(max_length=100, blank=True)
     note         = models.TextField(blank=True)
     created_at   = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering      = ['-date']
+        ordering        = ['-date']
         unique_together = ['employee', 'date']
 
-    def __str__(self): return f"{self.employee.name} OT {self.date} ({self.ot_hours}h)"
+    def __str__(self):
+        return f"{self.employee.name} OT {self.date} ({self.ot_hours}h)"
 
     @property
     def ot_pay(self):
@@ -141,11 +169,8 @@ class OvertimeRecord(models.Model):
 
 class LeaveRequest(models.Model):
     LEAVE_TYPES = [
-        ('annual','Annual Leave'),
-        ('medical','Medical Leave'),
-        ('emergency','Emergency'),
-        ('unpaid','Unpaid Leave'),
-        ('other','Other'),
+        ('annual','Annual Leave'), ('medical','Medical Leave'),
+        ('emergency','Emergency'), ('unpaid','Unpaid Leave'), ('other','Other'),
     ]
     STATUS = [('pending','Pending'),('approved','Approved'),('rejected','Rejected')]
 

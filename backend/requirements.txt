@@ -3,7 +3,7 @@ djangorestframework==3.14.0
 channels==4.0.0
 channels-redis==4.1.0
 insightface==0.7.3
-opencv-python==4.11.0.86
+opencv-python-headless==4.11.0.86
 numpy==1.26.4
 Pillow==10.1.0
 psycopg2-binary==2.9.9
