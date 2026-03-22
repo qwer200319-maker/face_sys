@@ -39,3 +39,8 @@
 .fs-overlay .fs-cam-card .cam-video{
   height:100%;
 }
+
+@media (max-width: 640px){
+  .fs-bar{flex-direction:column;align-items:stretch;gap:8px}
+  .fs-select{width:100%}
+}

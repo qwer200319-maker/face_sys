@@ -1,5 +1,5 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
+import React, { useState } from 'react';
+import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Dashboard    from './pages/Dashboard';
 import CameraPage   from './pages/CameraPage';
@@ -43,9 +43,49 @@ function Sidebar() {
   );
 }
 
+function TopBar({ onOpenMenu }) {
+  const { pathname } = useLocation();
+  const current = NAV.find(n => n.to === pathname) || NAV.find(n => n.to === '/');
+  return (
+    <div className="app-topbar">
+      <div className="topbar-brand">
+        <span className="topbar-logo">🏭</span>
+        <div>
+          <div className="logo-title">FactoryFace</div>
+          <div className="logo-sub">Attendance Pro v2</div>
+        </div>
+      </div>
+      <div className="topbar-title">{current?.label || 'Page'}</div>
+      <button className="btn btn-secondary btn-sm" onClick={onOpenMenu}>☰ Menu</button>
+    </div>
+  );
+}
+
 export default function App() {
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <BrowserRouter>
+      {/* Mobile/Tablet Top Bar */}
+      <TopBar onOpenMenu={() => setMenuOpen(true)} />
+
+      {/* Right Drawer Menu */}
+      <div className={`drawer-overlay${menuOpen ? ' open' : ''}`} onClick={() => setMenuOpen(false)} />
+      <aside className={`left-drawer${menuOpen ? ' open' : ''}`}>
+        <div className="drawer-header">
+          <div style={{ fontWeight: 700 }}>Menu</div>
+          <button className="btn btn-secondary btn-sm" onClick={() => setMenuOpen(false)}>✕</button>
+        </div>
+        <nav className="drawer-nav">
+          {NAV.map(l => (
+            <NavLink key={l.to} to={l.to} end={l.to==='/'}
+              onClick={() => setMenuOpen(false)}
+              className={({isActive})=>`nav-link${isActive?' active':''}`}>
+              <span>{l.icon}</span><span>{l.label}</span>
+            </NavLink>
+          ))}
+        </nav>
+      </aside>
+
       <div className="app-layout">
         <Sidebar/>
         <main className="app-main">
