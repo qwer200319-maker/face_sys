@@ -9,21 +9,30 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
-def _send(text: str, photo_path: str = None):
+def _send(text: str, photo=None):
     token = settings.TELEGRAM_BOT_TOKEN
     chat  = settings.TELEGRAM_CHAT_ID
     if not token or not chat:
         return
 
     try:
-        if photo_path:
-            with open(photo_path, 'rb') as f:
+        if photo:
+            # photo can be a file-like object or a file path
+            if hasattr(photo, 'read'):
                 requests.post(
                     f"https://api.telegram.org/bot{token}/sendPhoto",
                     data={'chat_id': chat, 'caption': text, 'parse_mode': 'HTML'},
-                    files={'photo': f},
+                    files={'photo': photo},
                     timeout=10,
                 )
+            else:
+                with open(photo, 'rb') as f:
+                    requests.post(
+                        f"https://api.telegram.org/bot{token}/sendPhoto",
+                        data={'chat_id': chat, 'caption': text, 'parse_mode': 'HTML'},
+                        files={'photo': f},
+                        timeout=10,
+                    )
         else:
             requests.post(
                 f"https://api.telegram.org/bot{token}/sendMessage",
@@ -34,7 +43,7 @@ def _send(text: str, photo_path: str = None):
         logger.error("Telegram error: %s", e)
 
 
-def notify_unknown(camera_id: str, snapshot_path: str = None):
+def notify_unknown(camera_id: str, snapshot=None):
     from django.utils import timezone
     now = timezone.localtime().strftime('%H:%M:%S')
     text = (
@@ -42,7 +51,7 @@ def notify_unknown(camera_id: str, snapshot_path: str = None):
         f"📹 Camera: <code>{camera_id}</code>\n"
         f"🕐 Time: {now}"
     )
-    _send(text, snapshot_path)
+    _send(text, snapshot)
 
 
 def notify_late(employee_name: str, employee_id: str, late_minutes: int, shift_name: str):

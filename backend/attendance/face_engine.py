@@ -117,7 +117,7 @@ class FaceRecognitionEngine:
             logger.info("FAISS rebuilt — %d unique employees", new_index.ntotal)
 
     # ── Detect faces ─────────────────────────────────────────
-    def _detect(self, image: np.ndarray, min_px: int = 60) -> list:
+    def _detect(self, image: np.ndarray, min_px: int = 45) -> list:
         enhanced = _clahe_enhance(image)
         try:
             faces = self._app.get(enhanced)
@@ -132,7 +132,7 @@ class FaceRecognitionEngine:
             if (x2 - x1) < min_px or (y2 - y1) < min_px:
                 continue
             crop = image[max(0, y1):min(h, y2), max(0, x1):min(w, x2)]
-            if crop.size > 0 and _blur_score(crop) < 30:
+            if crop.size > 0 and _blur_score(crop) < 20:
                 continue
             out.append({
                 'bbox':      [int(x1), int(y1), int(x2), int(y2)],

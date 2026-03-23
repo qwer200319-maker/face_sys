@@ -224,15 +224,19 @@ class CameraStreamConsumer(AsyncWebsocketConsumer):
     def _save_unknown(self, bbox, frame):
         try:
             from .models import AttendanceRecord
-            from django.core.files.base import ContentFile
+            import io
             x1, y1, x2, y2 = bbox
             h, w = frame.shape[:2]; pad = 20
             crop = frame[max(0,y1-pad):min(h,y2+pad), max(0,x1-pad):min(w,x2+pad)]
             rec  = AttendanceRecord.objects.create(is_unknown=True, confidence=0)
             _, buf = cv2.imencode('.jpg', crop, [cv2.IMWRITE_JPEG_QUALITY, 85])
-            rec.snapshot.save(f"unk_{rec.id}.jpg", ContentFile(buf.tobytes()), save=True)
             from .notify import notify_unknown
-            notify_unknown(self.camera_id, rec.snapshot.path if rec.snapshot else None)
+            try:
+                photo = io.BytesIO(buf.tobytes())
+                photo.name = f"unk_{rec.id}.jpg"
+                notify_unknown(self.camera_id, photo)
+            except Exception:
+                notify_unknown(self.camera_id, None)
             rec.unknown_alerted = True
             rec.save(update_fields=['unknown_alerted'])
         except Exception as ex:
