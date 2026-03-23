@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import './CameraView.css';
-
-const WS_HOST = window.location.hostname;
+import { getWsBase } from '../utils/ws';
 const FRAME_MS = 80;
 
 export default function CameraView({
@@ -35,7 +34,7 @@ export default function CameraView({
 
   useEffect(() => {
     const connect = () => {
-      const ws = new WebSocket(`ws://${WS_HOST}:8000/ws/camera/${camera.camera_id}/`);
+      const ws = new WebSocket(`${getWsBase()}/ws/camera/${camera.camera_id}/`);
       wsRef.current = ws;
       ws.onopen    = () => { setConnected(true); timerRef.current = setInterval(sendFrame, FRAME_MS); };
       ws.onmessage = (e) => {

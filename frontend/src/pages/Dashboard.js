@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { attendanceAPI, employeeAPI } from '../utils/api';
 import useWebSocket from '../hooks/useWebSocket';
+import { getWsBase } from '../utils/ws';
 
 export default function Dashboard() {
   const [summary, setSummary] = useState(null);
@@ -30,7 +31,7 @@ export default function Dashboard() {
     }
   }, []);
 
-  useWebSocket(`ws://${window.location.hostname}:8000/ws/dashboard/`, onWs);
+  useWebSocket(`${getWsBase()}/ws/dashboard/`, onWs);
 
   const today = new Date().toLocaleDateString('km-KH',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
 

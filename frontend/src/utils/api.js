@@ -1,5 +1,6 @@
 import axios from 'axios';
-const api = axios.create({ baseURL: '/api', timeout: 15000 });
+const API_BASE = process.env.REACT_APP_API_BASE || '/api';
+const api = axios.create({ baseURL: API_BASE, timeout: 15000 });
 
 export const deptAPI = {
   list:   ()     => api.get('/departments/'),
