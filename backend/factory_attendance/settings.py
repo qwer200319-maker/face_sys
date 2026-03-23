@@ -89,7 +89,15 @@ else:
         }
     }
 
-REDIS_URL = f"redis://{os.getenv('REDIS_HOST','127.0.0.1')}:{os.getenv('REDIS_PORT','6379')}"
+REDIS_URL = os.getenv('REDIS_URL')
+if not REDIS_URL:
+    _redis_host = os.getenv('REDIS_HOST', '127.0.0.1')
+    _redis_port = os.getenv('REDIS_PORT', '6379')
+    _redis_password = os.getenv('REDIS_PASSWORD', '')
+    if _redis_password:
+        REDIS_URL = f"redis://:{_redis_password}@{_redis_host}:{_redis_port}"
+    else:
+        REDIS_URL = f"redis://{_redis_host}:{_redis_port}"
 
 CHANNEL_LAYERS = {
     "default": {
