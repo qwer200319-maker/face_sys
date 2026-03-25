@@ -27,6 +27,8 @@ STATUS_SUFFIX = {
     'ignore':    '',
 }
 
+_ENGINE_BOOT_LOCK = asyncio.Lock()
+
 
 class CameraStreamConsumer(AsyncWebsocketConsumer):
 
@@ -38,15 +40,22 @@ class CameraStreamConsumer(AsyncWebsocketConsumer):
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self._boot)
+        # Don't block the websocket handshake on heavy model init.
+        self._boot_task = asyncio.create_task(self._ensure_engine_ready())
         logger.info("Camera %s connected", self.camera_id)
 
-    def _boot(self):
-        face_engine.initialize()
-        face_engine.reload()
+    async def _ensure_engine_ready(self):
+        if getattr(face_engine, "_ready", False):
+            return
+        async with _ENGINE_BOOT_LOCK:
+            if getattr(face_engine, "_ready", False):
+                return
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, face_engine.initialize)
 
     async def disconnect(self, code):
+        if hasattr(self, "_boot_task") and not self._boot_task.done():
+            self._boot_task.cancel()
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
     # ── Receive binary JPEG frame ─────────────────────────────

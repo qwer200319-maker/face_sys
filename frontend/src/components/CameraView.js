@@ -33,7 +33,10 @@ export default function CameraView({
   }, []);
 
   useEffect(() => {
+    let active = true;
+    let reconnectTimer = null;
     const connect = () => {
+      if (!active) return;
       const ws = new WebSocket(`${getWsBase()}/ws/camera/${camera.camera_id}/`);
       wsRef.current = ws;
       ws.onopen    = () => { setConnected(true); timerRef.current = setInterval(sendFrame, FRAME_MS); };
@@ -50,11 +53,21 @@ export default function CameraView({
           });
         }
       };
-      ws.onclose = () => { setConnected(false); clearInterval(timerRef.current); setTimeout(connect, 2500); };
-      ws.onerror = () => ws.close();
+      ws.onclose = () => {
+        setConnected(false);
+        clearInterval(timerRef.current);
+        if (!active) return;
+        reconnectTimer = setTimeout(connect, 2500);
+      };
+      ws.onerror = () => { try { ws.close(); } catch {} };
     };
     connect();
-    return () => { clearInterval(timerRef.current); wsRef.current?.close(); };
+    return () => {
+      active = false;
+      clearInterval(timerRef.current);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      wsRef.current?.close();
+    };
   }, [camera.camera_id]);
 
   const sendFrame = useCallback(() => {
