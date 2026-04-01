@@ -139,6 +139,10 @@ FACE_THRESHOLD            = float(os.getenv('FACE_THRESHOLD', '0.38'))
 FACE_DET_SIZE             = int(os.getenv('FACE_DET_SIZE', '640'))
 CHECKIN_COOLDOWN_SECONDS  = int(os.getenv('CHECKIN_COOLDOWN', '300'))
 MAX_EMBEDDINGS_PER_PERSON = int(os.getenv('MAX_EMBEDDINGS_PER_PERSON', '5'))
+UNKNOWN_ALERT_COOLDOWN_SECONDS = int(os.getenv('UNKNOWN_ALERT_COOLDOWN_SECONDS', '30'))
+RTSP_FPS                  = float(os.getenv('RTSP_FPS', '5'))
+RTSP_JPEG_QUALITY         = int(os.getenv('RTSP_JPEG_QUALITY', '70'))
+RTSP_SKIP_FRAMES          = int(os.getenv('RTSP_SKIP_FRAMES', '0'))
 
 # ── Telegram ──────────────────────────────────────────────────
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')

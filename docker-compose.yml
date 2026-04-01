@@ -8,6 +8,9 @@ services:
     restart: always
 
   backend:
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -48,3 +51,4 @@ services:
     restart: always
     volumes:
       - ./frontend:/app
+

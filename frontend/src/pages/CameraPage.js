@@ -4,7 +4,7 @@ import CameraView from '../components/CameraView';
 import toast from 'react-hot-toast';
 import './CameraPage.css';
 
-const EMPTY = { camera_id:'', name:'', location:'', stream_url:'' };
+const EMPTY = { camera_id:'', name:'', location:'', source_type:'webcam', stream_url:'', rtsp_fps:0, rtsp_quality:0 };
 
 export default function CameraPage() {
   const [cameras, setCameras] = useState([]);
@@ -16,9 +16,22 @@ export default function CameraPage() {
   const load = async () => { const r=await cameraAPI.list(); setCameras(r.data.results||r.data); };
 
   const save = async () => {
-    if (!form.camera_id||!form.name) return toast.error('Camera ID and Name required');
-    try { await cameraAPI.create(form); toast.success('Camera added!'); setForm(EMPTY); setShowForm(false); load(); }
-    catch { toast.error('Failed to add camera'); }
+    if (!form.camera_id || !form.name || !form.location) {
+      return toast.error('Camera ID, Name, and Location required');
+    }
+    if (form.source_type === 'rtsp' && !form.stream_url) {
+      return toast.error('RTSP URL required for RTSP source');
+    }
+    try {
+      await cameraAPI.create(form);
+      toast.success('Camera added!');
+      setForm(EMPTY);
+      setShowForm(false);
+      load();
+    } catch (err) {
+      const msg = err?.response?.data?.detail || err?.response?.data?.error || err?.response?.data?.message || 'Failed to add camera';
+      toast.error(typeof msg === 'string' ? msg : 'Failed to add camera');
+    }
   };
 
   const del = async (id) => {
@@ -40,9 +53,53 @@ export default function CameraPage() {
         <div className="card" style={{marginBottom:20}}>
           <div className="card-title">Add Camera</div>
           <div className="form-grid-2">
-            {[['camera_id','Camera ID','cam_01'],['name','Name','Main Gate'],['location','Location','Factory Entrance'],['stream_url','RTSP URL (blank=webcam)','rtsp://...']].map(([k,l,p])=>(
-              <div key={k}><label>{l}</label><input value={form[k]} placeholder={p} onChange={e=>setForm({...form,[k]:e.target.value})}/></div>
-            ))}
+            <div>
+              <label>Camera ID</label>
+              <input value={form.camera_id} placeholder="cam_01" onChange={e=>setForm({...form,camera_id:e.target.value})}/>
+            </div>
+            <div>
+              <label>Name</label>
+              <input value={form.name} placeholder="Main Gate" onChange={e=>setForm({...form,name:e.target.value})}/>
+            </div>
+            <div>
+              <label>Location</label>
+              <input value={form.location} placeholder="Factory Entrance" onChange={e=>setForm({...form,location:e.target.value})}/>
+            </div>
+            <div>
+              <label>Source</label>
+              <select
+                value={form.source_type}
+                onChange={e=>{
+                  const v = e.target.value;
+                  setForm({
+                    ...form,
+                    source_type: v,
+                    stream_url: v==='rtsp' ? form.stream_url : '',
+                    rtsp_fps: v==='rtsp' ? form.rtsp_fps : 0,
+                    rtsp_quality: v==='rtsp' ? form.rtsp_quality : 0,
+                  });
+                }}
+              >
+                <option value="webcam">Webcam (Browser)</option>
+                <option value="rtsp">RTSP / IP Camera</option>
+              </select>
+            </div>
+            {form.source_type === 'rtsp' && (
+              <>
+                <div>
+                  <label>RTSP URL</label>
+                  <input value={form.stream_url} placeholder="rtsp://user:pass@ip:554/stream" onChange={e=>setForm({...form,stream_url:e.target.value})}/>
+                </div>
+                <div>
+                  <label>RTSP FPS (optional)</label>
+                  <input type="number" min="1" value={form.rtsp_fps} placeholder="5" onChange={e=>setForm({...form,rtsp_fps: Number(e.target.value)})}/>
+                </div>
+                <div>
+                  <label>RTSP JPEG Quality (optional)</label>
+                  <input type="number" min="30" max="95" value={form.rtsp_quality} placeholder="70" onChange={e=>setForm({...form,rtsp_quality: Number(e.target.value)})}/>
+                </div>
+              </>
+            )}
           </div>
           <div style={{marginTop:14,display:'flex',gap:10}}>
             <button className="btn btn-primary" onClick={save}>💾 Save</button>
@@ -56,12 +113,13 @@ export default function CameraPage() {
           <div className="card-title">Camera List</div>
           <div style={{overflowX:'auto'}}>
             <table className="tbl">
-              <thead><tr><th>Camera ID</th><th>Name</th><th>Location</th><th>Status</th><th>Action</th></tr></thead>
+              <thead><tr><th>Camera ID</th><th>Name</th><th>Location</th><th>Source</th><th>Status</th><th>Action</th></tr></thead>
               <tbody>
                 {cameras.map(c=>(
                   <tr key={c.id}>
                     <td><code style={{color:'#60a5fa'}}>{c.camera_id}</code></td>
                     <td>{c.name}</td><td>{c.location}</td>
+                    <td>{c.source_type === 'rtsp' ? 'RTSP' : 'Webcam'}</td>
                     <td><span className={`badge ${c.is_active?'badge-green':'badge-red'}`}>{c.is_active?'Active':'Inactive'}</span></td>
                     <td><button className="btn btn-danger btn-sm" onClick={()=>del(c.id)}>🗑️ Delete</button></td>
                   </tr>
@@ -115,3 +173,8 @@ export default function CameraPage() {
     </div>
   );
 }
+
+
+
+
+

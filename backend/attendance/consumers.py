@@ -7,6 +7,7 @@ from datetime import datetime
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from .face_engine import face_engine
+from .rtsp_worker import rtsp_manager
 from .attendance_logic import (
     get_scan_status, is_late, is_in_cooldown,
     update_cooldown, save_checkout_with_hours,
@@ -28,6 +29,8 @@ STATUS_SUFFIX = {
 }
 
 _ENGINE_BOOT_LOCK = asyncio.Lock()
+_UNKNOWN_ALERTS = {}
+_UNKNOWN_ALERT_LOCK = asyncio.Lock()
 
 
 class CameraStreamConsumer(AsyncWebsocketConsumer):
@@ -40,8 +43,18 @@ class CameraStreamConsumer(AsyncWebsocketConsumer):
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
-        # Don't block the websocket handshake on heavy model init.
-        self._boot_task = asyncio.create_task(self._ensure_engine_ready())
+
+        cfg = await self._get_camera_config()
+        self.stream_url = cfg.get('stream_url', '')
+        self.is_rtsp = (cfg.get('source_type') == 'rtsp') and bool(self.stream_url)
+        self._rtsp_fps = cfg.get('rtsp_fps')
+        self._rtsp_quality = cfg.get('rtsp_quality')
+
+        if self.is_rtsp:
+            rtsp_manager.add_client(self.camera_id, self.stream_url, self._rtsp_fps, self._rtsp_quality)
+        else:
+            # Don't block the websocket handshake on heavy model init.
+            self._boot_task = asyncio.create_task(self._ensure_engine_ready())
         logger.info("Camera %s connected", self.camera_id)
 
     async def _ensure_engine_ready(self):
@@ -54,12 +67,16 @@ class CameraStreamConsumer(AsyncWebsocketConsumer):
             await loop.run_in_executor(None, face_engine.initialize)
 
     async def disconnect(self, code):
+        if getattr(self, "is_rtsp", False):
+            rtsp_manager.remove_client(self.camera_id)
         if hasattr(self, "_boot_task") and not self._boot_task.done():
             self._boot_task.cancel()
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
     # ── Receive binary JPEG frame ─────────────────────────────
     async def receive(self, text_data=None, bytes_data=None):
+        if getattr(self, "is_rtsp", False):
+            return
         if not bytes_data:
             return
         nparr = np.frombuffer(bytes_data, np.uint8)
@@ -82,14 +99,26 @@ class CameraStreamConsumer(AsyncWebsocketConsumer):
             'frame_height': frame.shape[0],
         }))
 
+    async def rtsp_frame(self, event):
+        await self.send(text_data=json.dumps({
+            'type':         'rtsp_frame',
+            'frame':        event.get('frame'),
+            'faces':        event.get('faces', []),
+            'timestamp':    datetime.now().isoformat(),
+            'camera_id':    self.camera_id,
+            'frame_width':  event.get('frame_width', 1280),
+            'frame_height': event.get('frame_height', 720),
+        }))
+
     # ── Process one detected face ─────────────────────────────
     async def _process(self, r: dict, frame: np.ndarray) -> dict:
         emp_id = r.get('employee_id')
 
         if not emp_id:
-            # Unknown person — save snapshot + alert
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, lambda: self._save_unknown(r['bbox'], frame))
+            # Unknown person — save snapshot + alert (rate-limited)
+            if await self._can_alert_unknown():
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, lambda: self._save_unknown(r['bbox'], frame))
             return self._unknown_label(r)
 
         emp = await self._get_employee(emp_id)
@@ -254,6 +283,30 @@ class CameraStreamConsumer(AsyncWebsocketConsumer):
     def _notify_late(self, emp, late_min):
         from .notify import notify_late
         notify_late(emp['name'], emp['employee_id'], late_min, emp['shift_name'] or 'N/A')
+
+    @database_sync_to_async
+    def _get_camera_config(self):
+        from .models import Camera
+        cam = Camera.objects.filter(camera_id=self.camera_id, is_active=True).first()
+        if not cam:
+            return {}
+        return {
+            'stream_url': cam.stream_url or '',
+            'source_type': cam.source_type,
+            'rtsp_fps': cam.rtsp_fps,
+            'rtsp_quality': cam.rtsp_quality,
+        }
+
+    async def _can_alert_unknown(self) -> bool:
+        from django.conf import settings
+        cooldown = getattr(settings, 'UNKNOWN_ALERT_COOLDOWN_SECONDS', 30)
+        now = datetime.now().timestamp()
+        async with _UNKNOWN_ALERT_LOCK:
+            last = _UNKNOWN_ALERTS.get(self.camera_id, 0)
+            if (now - last) < cooldown:
+                return False
+            _UNKNOWN_ALERTS[self.camera_id] = now
+            return True
 
 
 # ─────────────────────────────────────────────────────────────

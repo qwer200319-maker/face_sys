@@ -17,19 +17,71 @@ export default function CameraView({
   const canvasRef = useRef(null);
   const wsRef     = useRef(null);
   const timerRef  = useRef(null);
+  const streamRef = useRef(null);
   const [faces, setFaces]         = useState([]);
   const [dim, setDim]             = useState({w:1280,h:720});
   const [connected, setConnected] = useState(false);
   const [stats, setStats]         = useState({detected:0,known:0,unknown:0,late:0});
+  const [devices, setDevices]     = useState([]);
+  const storageKey = `camera_device_${camera.camera_id}`;
+  const isRtsp = camera.source_type === 'rtsp' || (!!(camera.stream_url && camera.stream_url.trim()));
+  const [deviceId, setDeviceId]   = useState(() => localStorage.getItem(storageKey) || '');
+  const [frameUrl, setFrameUrl]   = useState('');
 
   useEffect(() => {
-    (async () => {
+    if (isRtsp) return;
+    let active = true;
+    const loadDevices = async () => {
       try {
-        const s = await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720}});
+        // Ensure permission so device labels are available
+        if (!deviceId) {
+          const temp = await navigator.mediaDevices.getUserMedia({video:true});
+          temp.getTracks().forEach(t=>t.stop());
+        }
+        const list = await navigator.mediaDevices.enumerateDevices();
+        const vids = list.filter(d => d.kind === 'videoinput');
+        if (!active) return;
+        setDevices(vids);
+        if (!deviceId && vids.length) {
+          const saved = localStorage.getItem(storageKey);
+          setDeviceId(saved || vids[0].deviceId);
+        }
+      } catch (e) {
+        console.error('Cam devices:', e);
+      }
+    };
+    loadDevices();
+    return () => { active = false; };
+  }, [camera.camera_id, isRtsp]);
+
+  useEffect(() => {
+    if (isRtsp) return;
+    let cancelled = false;
+    const startStream = async () => {
+      try {
+        const constraints = deviceId
+          ? {video:{deviceId:{exact:deviceId}, width:1280, height:720}}
+          : {video:{width:1280, height:720}};
+        const s = await navigator.mediaDevices.getUserMedia(constraints);
+        if (cancelled) {
+          s.getTracks().forEach(t=>t.stop());
+          return;
+        }
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(t=>t.stop());
+        }
+        streamRef.current = s;
         if (videoRef.current) videoRef.current.srcObject = s;
-      } catch(e) { console.error('Cam:', e); }
-    })();
-    return () => videoRef.current?.srcObject?.getTracks().forEach(t=>t.stop());
+      } catch (e) {
+        console.error('Cam:', e);
+      }
+    };
+    startStream();
+    return () => { cancelled = true; };
+  }, [deviceId, isRtsp]);
+
+  useEffect(() => {
+    return () => streamRef.current?.getTracks().forEach(t=>t.stop());
   }, []);
 
   useEffect(() => {
@@ -39,10 +91,16 @@ export default function CameraView({
       if (!active) return;
       const ws = new WebSocket(`${getWsBase()}/ws/camera/${camera.camera_id}/`);
       wsRef.current = ws;
-      ws.onopen    = () => { setConnected(true); timerRef.current = setInterval(sendFrame, FRAME_MS); };
+      ws.onopen    = () => {
+        setConnected(true);
+        if (!isRtsp) timerRef.current = setInterval(sendFrame, FRAME_MS);
+      };
       ws.onmessage = (e) => {
         const d = JSON.parse(e.data);
-        if (d.type==='face_results') {
+        if (d.type==='face_results' || d.type==='rtsp_frame') {
+          if (d.type === 'rtsp_frame' && d.frame) {
+            setFrameUrl(`data:image/jpeg;base64,${d.frame}`);
+          }
           setFaces(d.faces||[]);
           setDim({w:d.frame_width||1280, h:d.frame_height||720});
           setStats({
@@ -68,9 +126,10 @@ export default function CameraView({
       if (reconnectTimer) clearTimeout(reconnectTimer);
       wsRef.current?.close();
     };
-  }, [camera.camera_id]);
+  }, [camera.camera_id, isRtsp]);
 
   const sendFrame = useCallback(() => {
+    if (isRtsp) return;
     const v=videoRef.current, c=canvasRef.current;
     if (!v||!c||!v.videoWidth) return;
     if (wsRef.current?.readyState!==WebSocket.OPEN) return;
@@ -79,7 +138,7 @@ export default function CameraView({
     c.toBlob(b=>b?.arrayBuffer().then(buf=>{
       if (wsRef.current?.readyState===WebSocket.OPEN) wsRef.current.send(buf);
     }),'image/jpeg',0.75);
-  },[]);
+  },[isRtsp]);
 
   return (
     <div className={`cam-card ${className}`}>
@@ -93,6 +152,25 @@ export default function CameraView({
             <div className="cam-live-badge">
               <span className={`live-dot${connected?' on':''}`}/>{connected?'LIVE':'Connecting…'}
             </div>
+            {!isRtsp && (
+              <select
+                className="cam-select"
+                value={deviceId}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDeviceId(val);
+                  localStorage.setItem(storageKey, val);
+                }}
+                title="Select camera device"
+              >
+                {devices.length === 0 && <option value="">Default Camera</option>}
+                {devices.map((d, i) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {d.label || `Camera ${i+1}`}
+                  </option>
+                ))}
+              </select>
+            )}
             {showActions && (
               <button
                 className="btn btn-secondary btn-sm"
@@ -113,7 +191,13 @@ export default function CameraView({
         </div>
       )}
       <div className="cam-video-wrap">
-        <video ref={videoRef} autoPlay muted playsInline className="cam-video"/>
+        {isRtsp ? (
+          frameUrl
+            ? <img src={frameUrl} alt="RTSP Stream" className="cam-video" />
+            : <div className="cam-empty">Waiting for RTSP…</div>
+        ) : (
+          <video ref={videoRef} autoPlay muted playsInline className="cam-video"/>
+        )}
         <div className="cam-overlay">
           {faces.map((f,i)=><FaceBox key={i} face={f} fw={dim.w} fh={dim.h}/>)}
         </div>

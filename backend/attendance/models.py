@@ -96,10 +96,17 @@ class FaceEmbedding(models.Model):
 
 
 class Camera(models.Model):
+    SOURCE_CHOICES = [
+        ('webcam', 'Webcam'),
+        ('rtsp', 'RTSP/IP Camera'),
+    ]
     camera_id  = models.CharField(max_length=20, unique=True)
     name       = models.CharField(max_length=100)
     location   = models.CharField(max_length=200)
+    source_type = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='webcam')
     stream_url = models.CharField(max_length=500, blank=True)
+    rtsp_fps    = models.FloatField(default=0)   # 0 = use global default
+    rtsp_quality = models.IntegerField(default=0)  # 0 = use global default
     is_active  = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
