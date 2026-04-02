@@ -6,6 +6,13 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
 
+try:
+    import pymysql
+    pymysql.install_as_MySQLdb()
+except Exception:
+    pass
+
+
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-dev-key')
 DEBUG      = os.getenv('DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = ['*']
@@ -54,25 +61,39 @@ def _database_from_url(url: str | None):
     if not url:
         return None
     parsed = urlparse(url)
-    if parsed.scheme not in {"postgres", "postgresql"}:
-        return None
-    query = parse_qs(parsed.query)
-    options = {}
-    for key in ("sslmode", "channel_binding"):
-        if key in query:
-            options[key] = query[key][0]
-    return {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': parsed.path.lstrip('/'),
-        'USER': parsed.username or '',
-        'PASSWORD': parsed.password or '',
-        'HOST': parsed.hostname or '',
-        'PORT': str(parsed.port or ''),
-        'OPTIONS': options,
-        'CONN_MAX_AGE': 60,
-    }
-
-
+    scheme = parsed.scheme
+    if scheme in {"postgres", "postgresql"}:
+        query = parse_qs(parsed.query)
+        options = {}
+        for key in ("sslmode", "channel_binding"):
+            if key in query:
+                options[key] = query[key][0]
+        return {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': parsed.path.lstrip('/'),
+            'USER': parsed.username or '',
+            'PASSWORD': parsed.password or '',
+            'HOST': parsed.hostname or '',
+            'PORT': str(parsed.port or ''),
+            'OPTIONS': options,
+            'CONN_MAX_AGE': 60,
+        }
+    if scheme in {"mysql", "mysql+pymysql", "mysql+mysqlclient"}:
+        query = parse_qs(parsed.query)
+        options = {}
+        if 'charset' in query:
+            options['charset'] = query['charset'][0]
+        return {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': parsed.path.lstrip('/'),
+            'USER': parsed.username or '',
+            'PASSWORD': parsed.password or '',
+            'HOST': parsed.hostname or '',
+            'PORT': str(parsed.port or ''),
+            'OPTIONS': options,
+            'CONN_MAX_AGE': 60,
+        }
+    return None
 _db_from_url = _database_from_url(os.getenv('DATABASE_URL'))
 if _db_from_url:
     DATABASES = {'default': _db_from_url}
@@ -161,3 +182,4 @@ LANGUAGE_CODE = 'en-us'
 TIME_ZONE     = 'Asia/Phnom_Penh'
 USE_I18N = True
 USE_TZ   = True
+
