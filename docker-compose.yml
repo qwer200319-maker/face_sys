@@ -22,8 +22,9 @@ services:
       REDIS_URL: "redis://redis:6379"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      CORS_ALLOWED_ORIGINS: "http://localhost:3000"
-      CSRF_TRUSTED_ORIGINS: "http://localhost:3000"
+      CORS_ALLOWED_ORIGINS: "http://192.168.1.101:8080,http://103.120.135.237:8080"
+      CSRF_TRUSTED_ORIGINS: "http://192.168.1.101:8080,http://103.120.135.237:8080"
+
     command: >
       bash -c "python manage.py migrate &&
                python manage.py collectstatic --noinput &&
