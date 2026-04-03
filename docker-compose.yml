@@ -42,8 +42,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     environment:
-      REACT_APP_API_BASE: "http://192.168.1.101:8000/api"
-      REACT_APP_WS_BASE: "ws://192.168.1.101:8000"
+      REACT_APP_API_BASE: "http://103.120.135.237:8000/api"
+      REACT_APP_WS_BASE: "ws://103.120.135.237:8000"
       WDS_SOCKET_PORT: "0"
       CHOKIDAR_USEPOLLING: "true"
     ports:
@@ -53,4 +53,3 @@ services:
     restart: always
     volumes:
       - ./frontend:/app
-
