@@ -17,13 +17,14 @@ services:
     environment:
       SECRET_KEY: "django-insecure-dev-key"
       DEBUG: "True"
-      ALLOWED_HOSTS: "*"
+      ALLOWED_HOSTS: "103.120.135.237,192.168.1.101,localhost"
       DATABASE_URL: "postgresql://neondb_owner:npg_vtIKcTmC8gN9@ep-dawn-mud-a1j09vq6-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
       REDIS_URL: "redis://redis:6379"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      CORS_ALLOWED_ORIGINS: "http://192.168.1.101:8080,http://103.120.135.237:8080"
-      CSRF_TRUSTED_ORIGINS: "http://192.168.1.101:8080,http://103.120.135.237:8080"
+      CORS_ALLOWED_ORIGINS: "http://103.120.135.237:8080,http://192.168.1.101:8080"
+      CSRF_TRUSTED_ORIGINS: "http://103.120.135.237:8080,http://192.168.1.101:8080"
+
 
     command: >
       bash -c "python manage.py migrate &&
